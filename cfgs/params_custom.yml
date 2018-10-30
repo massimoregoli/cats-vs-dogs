@@ -1,12 +1,17 @@
+# params used for both training and testing
 net: custom
 dataset_dir: data
-batch_size: 32
 img_width: 128
 img_height: 128
+
+# params used only for training
+batch_size: 32
 epochs: 50
 train_set_size: 22000
 val_set_size: 3000
 model_to_save_name: custom_model.h5
+
+# params used only for testing
 model_to_load_name: best_custom_model.ep-50_acc-0.91.h5
 save_predictions: True
 predictions_file_name: custom_predictions.csv

@@ -19,11 +19,6 @@ class AbstractModel(object):
 
         self._params = params
 
-        self._model_ready = False
-        self._train_data_prepared = False
-        self._test_data_prepared = False
-        self._model_trained = False
-
         self._classifier = None
         self._training_set = None
         self._test_set = None
@@ -35,48 +30,52 @@ class AbstractModel(object):
 
     def prepare_train_data(self):
 
+        # configures data generators, during training data augmentation strategy is adopted
         train_data_generator = ImageDataGenerator(rescale = 1./255, zoom_range = 0.2, shear_range = 0.2, horizontal_flip = True)
         val_data_generator = ImageDataGenerator(rescale = 1./255)
 
+        # configures data flow for training and validation
         self._training_set = train_data_generator.flow_from_directory(self._params['dataset_dir'] + '/train', shuffle = True, target_size = (self._params['img_width'], self._params['img_height']), batch_size = self._params['batch_size'], class_mode = 'binary')
         self._val_set = val_data_generator.flow_from_directory(self._params['dataset_dir'] + '/val', target_size = (self._params['img_width'], self._params['img_height']), batch_size = self._params['batch_size'], class_mode = 'binary')
 
-        self._train_data_prepared = True
-
+        print 'training and validation data configured'
 
     def fit_data(self):
 
         # saves TensorBoard logs
         tensorboard = TensorBoard(log_dir='logs/' + self._params['net'] + '_{}'.format(time()))
+
         # saves the best model obtained during training
         checkpointer = ModelCheckpoint(filepath='models/' + self._params['model_to_save_name'], verbose = 1, save_best_only=True)
 
         self._classifier.fit_generator(self._training_set, epochs = self._params['epochs'], steps_per_epoch = self._params['train_set_size'] // self._params['batch_size'], validation_data = self._val_set, validation_steps = self._params['val_set_size'] // self._params['batch_size'], callbacks=[checkpointer,tensorboard])
 
-        self._model_trained = True
-
+        print 'training process complete!'
 
     def load_model(self):
 
         # loads a previously stored model
         self._classifier = load_model('models/' + self._params['model_to_load_name'])
 
-        self._model_ready = True
-
+        print 'model ' + self._params['model_to_load_name'] + ' successfully loaded'
 
     def prepare_test_data(self):
 
+        # configures test data generator
         test_data_generator = ImageDataGenerator(rescale = 1./255)
+
+        # configures test data flow
         self._test_set = test_data_generator.flow_from_directory(self._params['dataset_dir'] + '/test', target_size = (self._params['img_width'], self._params['img_height']), batch_size = 1, class_mode = None)
 
-        self._test_data_prepared = False
-
+        print 'test data configured'
 
     def test_model(self):
 
         # provides an array of probabilities predicting whether test images represent dogs rather than cats
         # note that predictions are ordered according to the related image filename and NOT to the image ID ('10.jpg' comes before '2.jpg' etc.)
         predictions = self._classifier.predict_generator(self._test_set, verbose = 1)
+
+        print 'test completed' 
 
         if self._params['save_predictions'] == True:
 
@@ -85,17 +84,19 @@ class AbstractModel(object):
             image_ids = []
             for i in range(len(image_names)):
                 image_ids.append(int(image_names[i].split('/')[1].split('.')[0]))
+
             image_ids_index = sorted(range(len(image_ids)), key=lambda k: image_ids[k])
             ordered_predictions = []
             for i in range(len(image_ids_index)):
                 ordered_predictions.append(predictions.T[0][image_ids_index[i]])
+
             ordered_ids = sorted(image_ids)
 
             # stores (id,predictions) pairs into a CSV file  
             results = pd.DataFrame({"id": ordered_ids, "pred" :ordered_predictions})
             results.to_csv('predictions/' + self._params['predictions_file_name'], index = False)
 
-
+            print 'predictions ' + self._params['predictions_file_name'] + ' successfully saved' 
 
 class ModelFactory:
 
@@ -114,27 +115,29 @@ class CustomModel(AbstractModel):
 
         # builds the custom network
 
-        self._classifier = Sequential()
+        classifier = Sequential()
 
-        self._classifier.add(Conv2D(32, (3, 3), input_shape = (self._params['img_width'], self._params['img_height'], 3), activation = 'relu'))
-        self._classifier.add(MaxPooling2D(pool_size = (2, 2)))
+        classifier.add(Conv2D(32, (3, 3), input_shape = (self._params['img_width'], self._params['img_height'], 3), activation = 'relu'))
+        classifier.add(MaxPooling2D(pool_size = (2, 2)))
 
-        self._classifier.add(Conv2D(32, (3, 3), activation = 'relu'))
-        self._classifier.add(MaxPooling2D(pool_size = (2, 2)))
+        classifier.add(Conv2D(32, (3, 3), activation = 'relu'))
+        classifier.add(MaxPooling2D(pool_size = (2, 2)))
 
-        self._classifier.add(Conv2D(64, (3, 3), activation = 'relu'))
-        self._classifier.add(MaxPooling2D(pool_size = (2, 2)))
+        classifier.add(Conv2D(64, (3, 3), activation = 'relu'))
+        classifier.add(MaxPooling2D(pool_size = (2, 2)))
 
-        self._classifier.add(Flatten())
-        self._classifier.add(Dense(units = 64, activation = 'relu'))
-        self._classifier.add(Dropout(0.5))
+        classifier.add(Flatten())
+        classifier.add(Dense(units = 64, activation = 'relu'))
+        classifier.add(Dropout(0.5))
 
-        self._classifier.add(Dense(units = 1, activation = 'sigmoid'))
+        classifier.add(Dense(units = 1, activation = 'sigmoid'))
 
         # compiles the model
-        self._classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+        classifier.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
 
-        self._model_ready = True
+        self._classifier = classifier
+
+        print 'custom network model built'
 
 
 class VGG16Model(AbstractModel):
@@ -162,9 +165,7 @@ class VGG16Model(AbstractModel):
         # compiles the model
         self._classifier.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-        self._model_ready = True
-
-
+        print 'VGG16 network model built'
 
 
 
